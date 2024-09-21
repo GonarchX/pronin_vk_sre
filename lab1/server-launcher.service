@@ -1,0 +1,9 @@
+[Unit]
+Description=Launch server at boot
+
+[Service]
+ExecStart=/etc/opt/webapp/app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Poll server
+
+[Service]
+ExecStart=/etc/opt/webapp/poll_server.sh
+
+[Install]
+WantedBy=multi-user.target
