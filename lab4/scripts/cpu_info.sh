@@ -1,0 +1,2 @@
+lscpu | grep -E '^CPU\(s\):|^Model name:|^Architecture:|^CPU MHz:|^Core\(s\) per socket:|^Thread\(s\) per core:|^L1d cache:|^L1i cache:|^L2 cache:|^L3 cache:'
+dmidecode --type memory | grep -E 'Locator|Size|Type|Speed|Manufacturer'
