@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"syscall"
 )
 
@@ -42,22 +41,17 @@ func setLimits(cgroupDirectory, memoryLimit, cpuLimit string) error {
 	return nil
 }
 
-func bindCurrentProcessToCgroup(cgroupDirectory string) error {
-	fileName := filepath.Join(cgroupDirectory, procsFile)
-	curPid := []byte(strconv.Itoa(os.Getpid()))
-
-	if err := os.WriteFile(fileName, curPid, 0644); err != nil {
-		return fmt.Errorf("ошибка при привязке процесса к cgroup: %w", err)
-	}
-
-	return nil
-}
-
-func runCommandInNamespace(command string, args []string) error {
-	cmd := exec.Command(command, args...)
+func runCommandInNamespace(command string, args []string, rootfs string) error {
+	cmdArgs := make([]string, len(args)+1)
+	cmdArgs = append(cmdArgs, []string{"--fork", "--pid" /*"--mount", "--root"*/}...)
+	//cmdArgs = append(cmdArgs, rootfs)
+	cmdArgs = append(cmdArgs, command)
+	cmdArgs = append(cmdArgs, args...)
+	cmd := exec.Command("unshare", cmdArgs...)
 
 	// Привязываем вывод команды к нашим выводам
 	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
@@ -77,11 +71,12 @@ func main() {
 	cgroupDirectory := filepath.Join("/sys/fs/cgroup", cgroupName)
 	memoryLimit := flag.String("memory", "64M", "Лимит по памяти")
 	cpuLimit := flag.String("cpu", "50000", "Лимит по CPU в микросекундах (например, 200000 для 200 мс)")
+	rootfs := flag.String("rootfs", ".", "Путь к корневой файловой системе")
 
 	flag.Parse()
 
 	if len(os.Args) < 2 {
-		fmt.Println("Использование: cgroup_runner [-memory <лимит по памяти>] [-cpu <лимит по CPU>] <команда> <аргументы>")
+		fmt.Println("Использование: cgroup_runner [-memory <лимит по памяти>] [-cpu <лимит по CPU>] [-rootfs <путь к rootfs>] <команда> <аргументы>")
 		os.Exit(1)
 	}
 
@@ -93,8 +88,9 @@ func main() {
 		"Введена команда: %s\n"+
 		"Аргументы: %v\n"+
 		"Ограничение по памяти: %s\n"+
-		"Ограничение по CPU: %s\n\n",
-		cgroupName, cgroupDirectory, command, args, *memoryLimit, *cpuLimit)
+		"Ограничение по CPU: %s\n"+
+		"Путь к rootfs: %s\n\n",
+		cgroupName, cgroupDirectory, command, args, *memoryLimit, *cpuLimit, *rootfs)
 
 	if err := createCgroup(cgroupDirectory); err != nil {
 		fmt.Printf("Ошибка при создании cgroup: %v\n", err)
@@ -111,14 +107,9 @@ func main() {
 
 	fmt.Printf("Заданы лимиты cgroup\n")
 
-	if err := bindCurrentProcessToCgroup(cgroupDirectory); err != nil {
-		fmt.Printf("Не удалось привязать процесс к cgroup: %v\n", err)
-		os.Exit(1)
-	}
-
 	fmt.Printf("Для выхода из команды нажмите ctrl+C\n")
 
-	if err := runCommandInNamespace(command, args); err != nil {
+	if err := runCommandInNamespace(command, args, *rootfs); err != nil {
 		fmt.Printf("Ошибка при запуске команды: %v\n", err)
 		os.Exit(1)
 	}
